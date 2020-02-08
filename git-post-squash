@@ -3,31 +3,38 @@
 import argparse
 import subprocess
 import sys
+from git import Repo
 
 def run(branch):
     # find all tree on this branch that are not on the other branch
 
     trees = {}
+    repo = Repo(".")
+    if not repo.branches[branch]:
+        print(f"Could not find branch {branch}.")
+        sys.exit(1)
 
-    proc = subprocess.Popen(["git", "log", "--format=%H %T", "^" + branch, "HEAD"], stdout=subprocess.PIPE)
-    for line in proc.stdout.readlines():
-        [commit, tree] = line.split()
-        trees[tree] = commit
+    git = repo.git
+
+    for line in git.log("--format=%H %T", f"^{branch}", "HEAD").split("\n"):
+        if len(line) > 0:
+            [commit, tree] = line.split()
+            trees[tree] = commit
 
     # go through commit on other side, find first matching commit
 
-    proc = subprocess.Popen(["git", "log", "--format=%H %T", branch, "^HEAD"], stdout=subprocess.PIPE)
-    for line in proc.stdout.readlines():
-        [commit, tree] = line.split()
-        if tree in trees:
-            msg=f'''\
+    for line in git.log("--format=%H %T", branch, "^HEAD").split("\n"):
+        if len(line) > 0:
+            [commit, tree] = line.split()
+            if tree in trees:
+                msg=f'''\
 Post-squash merge of {branch}
 
 Commit {commit[:7]} on {branch} has the same tree as
 commit {trees[tree][:7]}.
 '''
-            subprocess.check_call(["git", "merge", "-s", "ours", commit, "-m", msg])
-            sys.exit(0)
+                git.merge("-s", "ours", commit, "-m", msg)
+                sys.exit(0)
 
     print(f"Could not find a suitable squash merge commit on {branch}.")
     sys.exit(1)
